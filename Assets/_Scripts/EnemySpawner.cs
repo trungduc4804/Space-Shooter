@@ -11,8 +11,14 @@ public class EnemySpawner : MonoBehaviour
     [SerializeField] private GameObject enemyPrefab;
     [SerializeField] private float spawnInterval  = 3f;   // seconds between spawns
     [SerializeField] private float spawnOffsetX   = 1.5f; // how far off the right edge
-    [SerializeField] private float minTargetX     = 0f;   // leftmost stop X (world space)
-    [SerializeField] private float maxTargetX     = 3f;   // rightmost stop X (world space)
+
+    // Stop position range as fraction of screen width (0 = left edge, 1 = right edge)
+    [SerializeField] [Range(0f, 1f)] private float minTargetXRatio = 0.3f;
+    [SerializeField] [Range(0f, 1f)] private float maxTargetXRatio = 0.7f;
+
+    // Chỉ spawn trong phần trên cùng của màn hình
+    // 0.7 = spawn từ 30% chiều cao trở lên (bỏ 30% phía dưới)
+    [SerializeField] [Range(0.1f, 1f)] private float spawnHeightRatio = 0.7f;
 
     [Header("Overlap Prevention")]
     [SerializeField] private float minSpacingY    = 1.5f; // min vertical gap between enemies
@@ -20,6 +26,8 @@ public class EnemySpawner : MonoBehaviour
     private float spawnTimer = 0f;
     private float screenMinY;
     private float screenMaxY;
+    private float screenMinX;
+    private float screenMaxX;
     private float spawnX;    // X position off right side of screen
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -33,12 +41,21 @@ public class EnemySpawner : MonoBehaviour
     {
         Camera cam = Camera.main;
 
+        Vector3 bottomLeft  = cam.ViewportToWorldPoint(new Vector3(0f, 0f, 0f));
         Vector3 bottomRight = cam.ViewportToWorldPoint(new Vector3(1f, 0f, 0f));
         Vector3 topRight    = cam.ViewportToWorldPoint(new Vector3(1f, 1f, 0f));
 
-        screenMinY = bottomRight.y + 0.5f;
-        screenMaxY = topRight.y   - 0.5f;
-        spawnX     = bottomRight.x + spawnOffsetX;
+        screenMinX = bottomLeft.x;
+        screenMaxX = bottomRight.x;
+
+        float fullHeight = topRight.y - bottomLeft.y;
+
+        // Chỉ spawn trong phần trên (spawnHeightRatio)
+        // VD: 0.7 → bỏ 30% phía dưới, chỉ dùng 70% phía trên
+        screenMinY = bottomLeft.y + fullHeight * (1f - spawnHeightRatio) + 0.5f;
+        screenMaxY = topRight.y - 0.5f;
+
+        spawnX = bottomRight.x + spawnOffsetX;
     }
 
     private void Update()
@@ -61,11 +78,14 @@ public class EnemySpawner : MonoBehaviour
         Vector3 spawnPos = new Vector3(spawnX, spawnY, 0f);
         GameObject enemyObj = Instantiate(enemyPrefab, spawnPos, Quaternion.identity);
 
-        // Tell the enemy where to stop inside the screen
+        // Tell the enemy where to stop inside the screen (calculated from viewport ratio)
         Enemy enemy = enemyObj.GetComponent<Enemy>();
         if (enemy != null)
         {
-            enemy.targetX = Random.Range(minTargetX, maxTargetX);
+            float screenWidth = screenMaxX - screenMinX;
+            float stopMinX    = screenMinX + screenWidth * minTargetXRatio;
+            float stopMaxX    = screenMinX + screenWidth * maxTargetXRatio;
+            enemy.targetX     = Random.Range(stopMinX, stopMaxX);
         }
     }
 
@@ -100,17 +120,36 @@ public class EnemySpawner : MonoBehaviour
         return true;
     }
 
-    // Editor helper — show spawn line
+    // Editor helper — show spawn line & spawn zone
     private void OnDrawGizmos()
     {
         if (Camera.main == null) return;
 
+        Vector3 bottomLeft  = Camera.main.ViewportToWorldPoint(new Vector3(0f, 0f, 0f));
         Vector3 bottomRight = Camera.main.ViewportToWorldPoint(new Vector3(1f, 0f, 0f));
         Vector3 topRight    = Camera.main.ViewportToWorldPoint(new Vector3(1f, 1f, 0f));
-        float gizmoX        = bottomRight.x + spawnOffsetX;
 
+        float fullHeight   = topRight.y - bottomLeft.y;
+        float spawnMinY    = bottomLeft.y + fullHeight * (1f - spawnHeightRatio);
+        float spawnMaxY    = topRight.y;
+        float gizmoX       = bottomRight.x + spawnOffsetX;
+
+        // Đường vàng = vị trí spawn (ngoài màn hình)
         Gizmos.color = Color.yellow;
-        Gizmos.DrawLine(new Vector3(gizmoX, bottomRight.y, 0f),
-                        new Vector3(gizmoX, topRight.y,    0f));
+        Gizmos.DrawLine(new Vector3(gizmoX, spawnMinY, 0f),
+                        new Vector3(gizmoX, spawnMaxY, 0f));
+
+        // Vùng xanh lá = khu vực Y cho phép spawn (trong màn hình)
+        Gizmos.color = new Color(0f, 1f, 0f, 0.15f);
+        Vector3 zoneCenter = new Vector3(
+            (bottomLeft.x + bottomRight.x) / 2f,
+            (spawnMinY + spawnMaxY) / 2f,
+            0f);
+        Vector3 zoneSize = new Vector3(bottomRight.x - bottomLeft.x, spawnMaxY - spawnMinY, 0f);
+        Gizmos.DrawCube(zoneCenter, zoneSize);
+
+        // Viền xanh lá
+        Gizmos.color = Color.green;
+        Gizmos.DrawWireCube(zoneCenter, zoneSize);
     }
 }

@@ -2,84 +2,139 @@ using System.Collections;
 using UnityEngine;
 
 /// <summary>
-/// Enemy1 – Spawn off-screen, move into game area, fire bullets at player.
+/// Enemy1 – Vòng đời theo GDD:
+///   1. ENTERING  : di chuyển từ off-screen vào targetX (Entry Path)
+///   2. STOPPED   : dừng tại targetX trong stopDuration giây, bắn đạn
+///   3. EXITING   : di chuyển ra khỏi màn hình (Exit Path) → Destroy
+///
 /// GDD specs:
 ///   HP = 100 | fire every 5s | bullet speed = 2x move speed
-///   Flash white on hit | 7% powerup drop chance on death
+///   Flash white on hit | 7% powerup drop on death
 /// </summary>
 [RequireComponent(typeof(Rigidbody2D))]
 [RequireComponent(typeof(SpriteRenderer))]
 public class Enemy : MonoBehaviour
 {
+    // ── Stats ──────────────────────────────────────────────────────────────────
     [Header("Stats")]
-    [SerializeField] private float maxHp       = 100f;
-    [SerializeField] private float moveSpeed   = 3f;
+    [SerializeField] private float maxHp     = 100f;
+    [SerializeField] private float moveSpeed = 3f;
 
+    // ── Lifecycle ──────────────────────────────────────────────────────────────
+    [Header("Lifecycle")]
+    [SerializeField] private float stopDuration = 8f;  // giây đứng trong màn hình (phải > shootInterval)
+
+    // ── Shooting ───────────────────────────────────────────────────────────────
     [Header("Shooting")]
     [SerializeField] private GameObject enemyBulletPrefab;
     [SerializeField] private Transform  firePoint;
-    [SerializeField] private float      shootInterval = 5f;   // GDD: 1 bullet per 5 seconds
+    [SerializeField] private float      shootInterval = 5f;   // GDD: 1 bullet / 5s
 
+    // ── Powerup Drop ───────────────────────────────────────────────────────────
     [Header("Powerup Drop")]
-    [SerializeField] private GameObject powerupPrefab;        // assign in inspector
-    [SerializeField] [Range(0f, 1f)] private float dropChance = 0.07f; // GDD: 7%
+    [SerializeField] private GameObject         powerupPrefab;
+    [SerializeField] [Range(0f,1f)] private float dropChance = 0.07f; // GDD: 7%
 
+    // ── Hit Flash ──────────────────────────────────────────────────────────────
     [Header("Hit Flash")]
     [SerializeField] private float flashDuration = 0.08f;
 
-    // ── State ─────────────────────────────────────────────────────────────────
-    private float         currentHp;
-    private float         shootTimer = 0f;
-    private bool          isDead     = false;
-    private Rigidbody2D   rb;
-    private SpriteRenderer sr;
-    private Color         originalColor;
+    // ── Internal State ─────────────────────────────────────────────────────────
+    private enum Phase { Entering, Stopped, Exiting }
+    private Phase phase = Phase.Entering;
 
-    // Target X to stop at inside the screen (set by EnemySpawner)
+    private float          currentHp;
+    private float          shootTimer;
+    private float          stopTimer;
+    private bool           isDead = false;
+    private Rigidbody2D    rb;
+    private SpriteRenderer sr;
+    private Color          originalColor;
+
+    // Set by EnemySpawner
     [HideInInspector] public float targetX;
 
     // ─────────────────────────────────────────────────────────────────────────
 
     private void Awake()
     {
-        rb = GetComponent<Rigidbody2D>();
-        sr = GetComponent<SpriteRenderer>();
+        rb            = GetComponent<Rigidbody2D>();
+        sr            = GetComponent<SpriteRenderer>();
         originalColor = sr.color;
     }
 
     private void Start()
     {
         currentHp  = maxHp;
-        shootTimer = shootInterval; // wait before first shot
+        shootTimer = 0f; // bắn ngay khi fully on screen (không cần chờ 5s đầu)
+
+        // Lật sprite để nhìn về phía player (trái)
+        sr.flipX = true;
+
+        phase = Phase.Entering;
     }
 
     private void Update()
     {
         if (isDead) return;
 
-        MoveToTarget();
-        HandleShooting();
+        switch (phase)
+        {
+            case Phase.Entering: UpdateEntering(); break;
+            case Phase.Stopped:  UpdateStopped();  break;
+            case Phase.Exiting:  UpdateExiting();  break;
+        }
     }
 
-    // ── Movement ──────────────────────────────────────────────────────────────
+    // ── Phase: ENTERING ───────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Moves toward targetX, stops when reached.
-    /// EnemySpawner sets targetX to a random X inside the screen.
-    /// </summary>
-    private void MoveToTarget()
+    private void UpdateEntering()
     {
         float currentX = transform.position.x;
 
         if (currentX > targetX)
         {
-            // Still entering the screen — move left
+            // Di chuyển sang trái về targetX
             rb.linearVelocity = Vector2.left * moveSpeed;
         }
         else
         {
-            // Reached target position — stop horizontal movement
+            // Đã đến targetX → dừng lại, bắt đầu đếm stopDuration
             rb.linearVelocity = Vector2.zero;
+            stopTimer = stopDuration;
+            phase     = Phase.Stopped;
+        }
+    }
+
+    // ── Phase: STOPPED ────────────────────────────────────────────────────────
+
+    private void UpdateStopped()
+    {
+        rb.linearVelocity = Vector2.zero;
+
+        // Bắn đạn khi fully on screen
+        HandleShooting();
+
+        // Đếm ngược thời gian dừng
+        stopTimer -= Time.deltaTime;
+        if (stopTimer <= 0f)
+        {
+            phase = Phase.Exiting;
+        }
+    }
+
+    // ── Phase: EXITING ────────────────────────────────────────────────────────
+
+    private void UpdateExiting()
+    {
+        // Di chuyển ra ngoài cạnh phải màn hình
+        rb.linearVelocity = Vector2.right * moveSpeed;
+
+        // Destroy khi hoàn toàn ra khỏi màn hình
+        Vector3 vp = Camera.main.WorldToViewportPoint(transform.position);
+        if (vp.x > 1.2f)
+        {
+            Destroy(gameObject);
         }
     }
 
@@ -87,7 +142,7 @@ public class Enemy : MonoBehaviour
 
     private void HandleShooting()
     {
-        // GDD: enemy only fires when FULLY visible on screen
+        // GDD: chỉ bắn khi FULLY visible on screen
         if (!IsFullyOnScreen()) return;
 
         shootTimer -= Time.deltaTime;
@@ -102,17 +157,27 @@ public class Enemy : MonoBehaviour
     {
         if (enemyBulletPrefab == null || firePoint == null)
         {
-            Debug.LogWarning($"Enemy [{name}]: enemyBulletPrefab or firePoint not assigned!");
+            Debug.LogWarning($"Enemy [{name}]: enemyBulletPrefab hoặc firePoint chưa gán!");
             return;
         }
 
-        GameObject bulletObj = Instantiate(enemyBulletPrefab, firePoint.position, Quaternion.identity);
-        EnemyBullet bullet   = bulletObj.GetComponent<EnemyBullet>();
+        // Tính hướng bắn đến vị trí player hiện tại
+        Vector2 shootDirection = Vector2.left; // fallback
+
+        GameObject playerObj = GameObject.FindGameObjectWithTag("Player");
+        if (playerObj != null)
+        {
+            shootDirection = ((Vector2)playerObj.transform.position
+                              - (Vector2)firePoint.position).normalized;
+        }
+
+        GameObject  bulletObj = Instantiate(enemyBulletPrefab, firePoint.position, Quaternion.identity);
+        EnemyBullet bullet    = bulletObj.GetComponent<EnemyBullet>();
 
         if (bullet != null)
         {
-            bullet.direction = Vector2.left;                 // fires toward player
-            bullet.speed     = moveSpeed * 2f;               // GDD: bullet speed = 2× move speed
+            bullet.direction = shootDirection;
+            bullet.speed     = moveSpeed * 2f; // GDD: bullet speed = 2× move speed
         }
     }
 
@@ -131,9 +196,7 @@ public class Enemy : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Flash white briefly (Cuphead-style hit feedback).
-    /// </summary>
+    /// <summary>Flash trắng nhanh 1 lần (Cuphead-style).</summary>
     private IEnumerator HitFlash()
     {
         sr.color = Color.white;
@@ -143,30 +206,27 @@ public class Enemy : MonoBehaviour
 
     private void Die()
     {
-        isDead = true;
+        isDead            = true;
         rb.linearVelocity = Vector2.zero;
 
-        // GDD: 7% chance to drop a powerup
+        // GDD: 7% cơ hội drop powerup
         if (powerupPrefab != null && Random.value <= dropChance)
         {
             Instantiate(powerupPrefab, transform.position, Quaternion.identity);
         }
 
-        // TODO: play explosion VFX/SFX here
-        // TODO: add score points (Part 9)
+        // TODO: explosion VFX/SFX (Part 11)
+        // TODO: add score (Part 9)
 
         Destroy(gameObject);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Returns true only when ALL corners of the sprite are inside the viewport.
-    /// </summary>
+    /// <summary>True khi TẤT CẢ góc sprite nằm trong viewport.</summary>
     private bool IsFullyOnScreen()
     {
         Bounds bounds = sr.bounds;
-
         Vector3 vpMin = Camera.main.WorldToViewportPoint(bounds.min);
         Vector3 vpMax = Camera.main.WorldToViewportPoint(bounds.max);
 
@@ -174,14 +234,17 @@ public class Enemy : MonoBehaviour
                vpMin.y >= 0f && vpMax.y <= 1f;
     }
 
-    // ── Collision with player body ────────────────────────────────────────────
+    // ── Collision ─────────────────────────────────────────────────────────────
 
     private void OnTriggerEnter2D(Collider2D other)
     {
+        // Chỉ damage player khi enemy đang active (không trong giai đoạn đang exit)
+        if (phase == Phase.Exiting) return;
+
         Player player = other.GetComponent<Player>();
         if (player != null)
         {
-            player.TakeDamage(25f); // enemy ram damage
+            player.TakeDamage(25f);
         }
     }
 }
