@@ -187,6 +187,9 @@ public class Enemy : MonoBehaviour
     {
         if (isDead) return;
 
+        // GDD: enemy đang Exit không nhận damage
+        if (phase == Phase.Exiting) return;
+
         currentHp -= amount;
         StartCoroutine(HitFlash());
 

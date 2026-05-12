@@ -5,6 +5,9 @@ public class GameManager : MonoBehaviour
 {
     public static GameManager Instance { get; private set; }
     private bool isGameOver = false;
+
+    [SerializeField] private string gameScene = "SampleScene"; // tên scene gameplay
+
     private void Awake()
     {
         if (Instance != null && Instance != this)
