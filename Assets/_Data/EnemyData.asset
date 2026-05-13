@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: EnemyData
   m_EditorClassIdentifier: Assembly-CSharp::EnemyData
   maxHp: 100
-  moveSpeed: 2.5
+  moveSpeed: 3
   stopDuration: 8
   fireInterval: 5
   bulletPrefab: {fileID: 1803185893714332905, guid: a9ae002d6bd83e74e980357d9019711d, type: 3}
