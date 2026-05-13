@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
+using TMPro;
 
 /// <summary>
 /// Quản lý HUD và màn hình Game Over.
@@ -10,9 +11,13 @@ public class UIManager : MonoBehaviour
     public static UIManager Instance { get; private set; }
 
     [Header("HUD - Lives")]
-    [SerializeField] private Image[] lifeIcons;      // Gán 3 Image icon tim vào đây
-    [SerializeField] private Sprite  lifeFullSprite; // Sprite tim đầy
-    [SerializeField] private Sprite  lifeEmptySprite;// Sprite tim rỗng (khi mất mạng)
+    [SerializeField] private Image[] lifeIcons;
+    [SerializeField] private Sprite  lifeFullSprite;
+    [SerializeField] private Sprite  lifeEmptySprite;
+
+    [Header("HUD - Score")]
+    [SerializeField] private TMP_Text scoreText;       // Text hiển thị điểm
+    [SerializeField] private TMP_Text multiplierText;  // Text hiển thị multiplier (2x, 4x, 5x)
 
     [Header("Game Over Panel")]
     [SerializeField] private GameObject gameOverPanel; // Panel Game Over (ẩn ban đầu)
@@ -37,6 +42,33 @@ public class UIManager : MonoBehaviour
         // Gán sự kiện nút Restart
         if (restartButton != null)
             restartButton.onClick.AddListener(OnRestartClicked);
+    }
+
+    // ── Score HUD ──────────────────────────────────────────────────────────────
+
+    /// <summary>Cập nhật điểm và multiplier trên HUD.</summary>
+    public void UpdateScore(int score, float multiplier)
+    {
+        if (scoreText != null)
+            scoreText.text = score.ToString("N0"); // có dấu phẩy ngăn cách nhóm số
+
+        if (multiplierText != null)
+        {
+            if (multiplier <= 1f)
+            {
+                multiplierText.gameObject.SetActive(false); // ẩn khi 1x
+            }
+            else
+            {
+                multiplierText.gameObject.SetActive(true);
+                multiplierText.text = $"{multiplier:0}x";
+
+                // Đổi màu theo mức multiplier
+                multiplierText.color = multiplier >= 5f ? Color.red
+                                     : multiplier >= 4f ? new Color(1f, 0.5f, 0f) // cam
+                                     :                    Color.yellow;            // 2x
+            }
+        }
     }
 
     // ── Lives HUD ─────────────────────────────────────────────────────────────

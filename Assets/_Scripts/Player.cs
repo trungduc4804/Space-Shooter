@@ -129,6 +129,10 @@ public class Player : MonoBehaviour
         if (state == PlayerState.Recovery) return;
         if (GameManager.Instance != null && GameManager.Instance.IsGameOver) return;
 
+        // Phần F: reset multiplier khi bị đánh
+        if (ScoreManager.Instance != null)
+            ScoreManager.Instance.OnPlayerHit();
+
         currentLives--;
         UpdateHUD();
 

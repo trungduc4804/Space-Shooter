@@ -218,8 +218,11 @@ public class Enemy : MonoBehaviour
             Instantiate(powerupPrefab, transform.position, Quaternion.identity);
         }
 
+        // GDD: +25 điểm × multiplier khi tiêu diệt enemy (Phần E)
+        if (ScoreManager.Instance != null)
+            ScoreManager.Instance.AddEnemyKillScore();
+
         // TODO: explosion VFX/SFX (Part 11)
-        // TODO: add score (Part 9)
 
         Destroy(gameObject);
     }
