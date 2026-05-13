@@ -14,7 +14,7 @@ GameObject:
   - component: {fileID: 752558754027317636}
   - component: {fileID: 9147452790165690276}
   m_Layer: 0
-  m_Name: Enemy
+  m_Name: Enemy 1
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -85,7 +85,7 @@ SpriteRenderer:
   m_SortingLayer: 3
   m_SortingOrder: 0
   m_MaskInteraction: 0
-  m_Sprite: {fileID: -2553566032907813139, guid: 9f9a95bcf5a95d14ba65cdb79cf2ee6e, type: 3}
+  m_Sprite: {fileID: -6026258161109100187, guid: 9f9a95bcf5a95d14ba65cdb79cf2ee6e, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -134,15 +134,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ba2077289b8461f4cb7b1f3ecc2e9f81, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Enemy
-  maxHp: 100
-  moveSpeed: 3
-  stopDuration: 4
-  enemyBulletPrefab: {fileID: 1803185893714332905, guid: a9ae002d6bd83e74e980357d9019711d, type: 3}
-  firePoint: {fileID: 6186800458383377748}
-  shootInterval: 5
+  data: {fileID: 11400000, guid: 2563a86a9e262ae43b523efdfa3a2b44, type: 2}
   powerupPrefab: {fileID: 5468895927098549090, guid: 90a4b2fbd6c09e04391bb988a9250f06, type: 3}
-  dropChance: 0.07
   flashDuration: 0.08
+  firePoint: {fileID: 6186800458383377748}
   targetX: 0
 --- !u!61 &9147452790165690276
 BoxCollider2D:

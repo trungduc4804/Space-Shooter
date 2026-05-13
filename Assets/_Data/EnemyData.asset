@@ -1,0 +1,22 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ffabeb14d0254c3439e4e6c11f8e6928, type: 3}
+  m_Name: EnemyData
+  m_EditorClassIdentifier: Assembly-CSharp::EnemyData
+  maxHp: 100
+  moveSpeed: 2.5
+  stopDuration: 8
+  fireInterval: 5
+  bulletPrefab: {fileID: 1803185893714332905, guid: a9ae002d6bd83e74e980357d9019711d, type: 3}
+  bulletSpeedMultiplier: 2
+  scoreValue: 25
+  powerupDropRate: 0.07

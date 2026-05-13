@@ -15,29 +15,17 @@ using UnityEngine;
 [RequireComponent(typeof(SpriteRenderer))]
 public class Enemy : MonoBehaviour
 {
-    // ── Stats ──────────────────────────────────────────────────────────────────
-    [Header("Stats")]
-    [SerializeField] private float maxHp     = 100f;
-    [SerializeField] private float moveSpeed = 3f;
-
-    // ── Lifecycle ──────────────────────────────────────────────────────────────
-    [Header("Lifecycle")]
-    [SerializeField] private float stopDuration = 8f;  // giây đứng trong màn hình (phải > shootInterval)
-
-    // ── Shooting ───────────────────────────────────────────────────────────────
-    [Header("Shooting")]
-    [SerializeField] private GameObject enemyBulletPrefab;
-    [SerializeField] private Transform  firePoint;
-    [SerializeField] private float      shootInterval = 5f;   // GDD: 1 bullet / 5s
+    [Header("Data")]
+    public EnemyData data;
 
     // ── Powerup Drop ───────────────────────────────────────────────────────────
     [Header("Powerup Drop")]
-    [SerializeField] private GameObject         powerupPrefab;
-    [SerializeField] [Range(0f,1f)] private float dropChance = 0.07f; // GDD: 7%
+    [SerializeField] private GameObject powerupPrefab;
 
     // ── Hit Flash ──────────────────────────────────────────────────────────────
     [Header("Hit Flash")]
     [SerializeField] private float flashDuration = 0.08f;
+    [SerializeField] private Transform firePoint;
 
     // ── Internal State ─────────────────────────────────────────────────────────
     private enum Phase { Entering, Stopped, Exiting }
@@ -65,7 +53,12 @@ public class Enemy : MonoBehaviour
 
     private void Start()
     {
-        currentHp  = maxHp;
+        if (data == null)
+        {
+            Debug.LogError($"Enemy [{name}] missing EnemyData!");
+            return;
+        }
+        currentHp  = data.maxHp;
         shootTimer = 0f; // bắn ngay khi fully on screen (không cần chờ 5s đầu)
 
         phase = Phase.Entering;
@@ -92,13 +85,13 @@ public class Enemy : MonoBehaviour
         if (currentX > targetX)
         {
             // Di chuyển sang trái về targetX
-            rb.linearVelocity = Vector2.left * moveSpeed;
+            rb.linearVelocity = Vector2.left * data.moveSpeed;
         }
         else
         {
             // Đã đến targetX → dừng lại, bắt đầu đếm stopDuration
             rb.linearVelocity = Vector2.zero;
-            stopTimer = stopDuration;
+            stopTimer = data.stopDuration;
             phase     = Phase.Stopped;
         }
     }
@@ -125,7 +118,7 @@ public class Enemy : MonoBehaviour
     private void UpdateExiting()
     {
         // Di chuyển ra ngoài cạnh phải màn hình
-        rb.linearVelocity = Vector2.right * moveSpeed;
+        rb.linearVelocity = Vector2.right * data.moveSpeed;
 
         // Destroy khi hoàn toàn ra khỏi màn hình
         Vector3 vp = Camera.main.WorldToViewportPoint(transform.position);
@@ -146,15 +139,15 @@ public class Enemy : MonoBehaviour
         if (shootTimer <= 0f)
         {
             FireBullet();
-            shootTimer = shootInterval;
+            shootTimer = data.fireInterval;
         }
     }
 
     private void FireBullet()
     {
-        if (enemyBulletPrefab == null || firePoint == null)
+        if (data.bulletPrefab == null || firePoint == null)
         {
-            Debug.LogWarning($"Enemy [{name}]: enemyBulletPrefab hoặc firePoint chưa gán!");
+            Debug.LogWarning($"Enemy [{name}]: bulletPrefab trong EnemyData hoặc firePoint chưa gán!");
             return;
         }
 
@@ -168,14 +161,14 @@ public class Enemy : MonoBehaviour
                               - (Vector2)firePoint.position).normalized;
         }
 
-        // Quan trọng: dùng enemyBulletPrefab.transform.rotation để giữ góc Z=90 mà user đã setup trong prefab
-        GameObject  bulletObj = Instantiate(enemyBulletPrefab, firePoint.position, enemyBulletPrefab.transform.rotation);
+        // Quan trọng: dùng bulletPrefab.transform.rotation để giữ góc Z=90 mà user đã setup trong prefab
+        GameObject  bulletObj = Instantiate(data.bulletPrefab, firePoint.position, data.bulletPrefab.transform.rotation);
         EnemyBullet bullet    = bulletObj.GetComponent<EnemyBullet>();
 
         if (bullet != null)
         {
             bullet.direction = shootDirection;
-            bullet.speed     = moveSpeed * 2f; // GDD: bullet speed = 2× move speed
+            bullet.speed     = data.moveSpeed * data.bulletSpeedMultiplier; // GDD: bullet speed = 2× move speed
         }
     }
 
@@ -210,17 +203,14 @@ public class Enemy : MonoBehaviour
         isDead            = true;
         rb.linearVelocity = Vector2.zero;
 
-        // GDD: 7% cơ hội drop powerup
-        if (powerupPrefab != null && Random.value <= dropChance)
+        // GDD: drop powerup rate từ EnemyData
+        if (powerupPrefab != null && Random.value <= data.powerupDropRate)
         {
             Instantiate(powerupPrefab, transform.position, Quaternion.identity);
         }
 
-        // GDD: +25 điểm × multiplier khi tiêu diệt enemy (Phần E)
         if (ScoreManager.Instance != null)
-            ScoreManager.Instance.AddEnemyKillScore();
-
-        // TODO: explosion VFX/SFX (Part 11)
+            ScoreManager.Instance.AddScore(data.scoreValue);
 
         Destroy(gameObject);
     }

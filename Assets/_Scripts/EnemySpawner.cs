@@ -1,34 +1,39 @@
 using UnityEngine;
 
 /// <summary>
-/// Spawns Enemy1 at random Y positions off the right edge of the screen.
-/// – Enemies are spaced apart to prevent overlap.
-/// – targetX is set to a random X inside the visible area.
+/// Quản lý hệ thống Đợt Lính (Wave) và Đội Hình (Formations).
+/// Độ khó tăng dần theo thời gian (0-30s, 30s-60s, >60s).
 /// </summary>
 public class EnemySpawner : MonoBehaviour
 {
     [Header("Spawn Settings")]
-    [SerializeField] private GameObject enemyPrefab;
-    [SerializeField] private float spawnInterval  = 3f;   // seconds between spawns
-    [SerializeField] private float spawnOffsetX   = 1.5f; // how far off the right edge
+    [SerializeField] private GameObject[] enemyPrefabs;
+    [SerializeField] private float waveInterval = 4f;   // Thời gian giữa các đợt
+    [SerializeField] private float spawnOffsetX = 1.5f; // Khoảng cách ngoài rìa phải màn hình
 
-    // Stop position range as fraction of screen width (0 = left edge, 1 = right edge)
+    // Điểm dừng của địch trên màn hình (0 = sát mép trái, 1 = sát mép phải)
+    [Header("Screen Settings")]
     [SerializeField] [Range(0f, 1f)] private float minTargetXRatio = 0.3f;
     [SerializeField] [Range(0f, 1f)] private float maxTargetXRatio = 0.7f;
-
-    // Chỉ spawn trong phần trên cùng của màn hình
-    // 0.7 = spawn từ 30% chiều cao trở lên (bỏ 30% phía dưới)
+    
+    // Chỉ spawn trong phần trên cùng của màn hình (70% trên cùng để chừa HUD dưới cùng)
     [SerializeField] [Range(0.1f, 1f)] private float spawnHeightRatio = 0.7f;
+    
+    // Khoảng cách Y tối thiểu giữa các quái để không bị đè lên nhau
+    [SerializeField] private float minSpacingY = 1.5f;
 
-    [Header("Overlap Prevention")]
-    [SerializeField] private float minSpacingY    = 1.5f; // min vertical gap between enemies
+    private float waveTimer = 0f;
+    private float elapsedTime = 0f;
 
-    private float spawnTimer = 0f;
     private float screenMinY;
     private float screenMaxY;
     private float screenMinX;
     private float screenMaxX;
-    private float spawnX;    // X position off right side of screen
+    private float spawnX;
+
+    private GameObject currentWavePrefab; // Lưu loại quái đang sinh ra trong đợt này
+
+    private enum WaveType { Single, Column, VShape, Diagonal }
 
     // ─────────────────────────────────────────────────────────────────────────
 
@@ -50,8 +55,7 @@ public class EnemySpawner : MonoBehaviour
 
         float fullHeight = topRight.y - bottomLeft.y;
 
-        // Chỉ spawn trong phần trên (spawnHeightRatio)
-        // VD: 0.7 → bỏ 30% phía dưới, chỉ dùng 70% phía trên
+        // Bỏ qua phần dưới màn hình (tránh HUD)
         screenMinY = bottomLeft.y + fullHeight * (1f - spawnHeightRatio) + 0.5f;
         screenMaxY = topRight.y - 0.5f;
 
@@ -60,59 +64,191 @@ public class EnemySpawner : MonoBehaviour
 
     private void Update()
     {
-        spawnTimer += Time.deltaTime;
-        if (spawnTimer >= spawnInterval)
+        elapsedTime += Time.deltaTime;
+        waveTimer += Time.deltaTime;
+
+        if (waveTimer >= waveInterval)
         {
-            spawnTimer = 0f;
-            TrySpawnEnemy();
+            waveTimer = 0f;
+            SpawnWave();
         }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // WAVE LOGIC
+    // ─────────────────────────────────────────────────────────────────────────
 
-    private void TrySpawnEnemy()
+    private void SpawnWave()
     {
-        float spawnY = GetSafeSpawnY();
-        if (float.IsNaN(spawnY)) return; // no safe position found
-
-        Vector3 spawnPos = new Vector3(spawnX, spawnY, 0f);
-        // Quan trọng: Sử dụng enemyPrefab.transform.rotation thay vì Quaternion.identity
-        // để giữ nguyên góc xoay (Z=90) mà user đã setup trong Prefab.
-        GameObject enemyObj = Instantiate(enemyPrefab, spawnPos, enemyPrefab.transform.rotation);
-
-        // Tell the enemy where to stop inside the screen (calculated from viewport ratio)
-        Enemy enemy = enemyObj.GetComponent<Enemy>();
-        if (enemy != null)
+        if (enemyPrefabs == null || enemyPrefabs.Length == 0)
         {
-            float screenWidth = screenMaxX - screenMinX;
-            float stopMinX    = screenMinX + screenWidth * minTargetXRatio;
-            float stopMaxX    = screenMinX + screenWidth * maxTargetXRatio;
-            enemy.targetX     = Random.Range(stopMinX, stopMaxX);
+            Debug.LogWarning("EnemySpawner: Chưa gán enemyPrefabs!");
+            return;
+        }
+
+        // Chọn ngẫu nhiên 1 loại quái cho cả đợt này
+        currentWavePrefab = enemyPrefabs[Random.Range(0, enemyPrefabs.Length)];
+
+        WaveType type = SelectWaveTypeBasedOnDifficulty();
+
+        switch (type)
+        {
+            case WaveType.Single:
+                SpawnSingle();
+                break;
+            case WaveType.Column:
+                SpawnColumn(3); // Ra 3 con xếp hàng dọc
+                break;
+            case WaveType.VShape:
+                SpawnVShape();  // Ra đội hình mũi nhọn 3 con
+                break;
+            case WaveType.Diagonal:
+                SpawnDiagonal(3); // Ra 3 con theo đường chéo
+                break;
         }
     }
 
-    /// <summary>
-    /// Picks a random Y that is at least minSpacingY away from all existing enemies.
-    /// Returns float.NaN if no safe spot found after several attempts.
-    /// </summary>
+    private WaveType SelectWaveTypeBasedOnDifficulty()
+    {
+        if (elapsedTime < 30f)
+        {
+            // Giai đoạn 1 (0-30s): Rất dễ, chỉ ra 1 con lẻ
+            return WaveType.Single;
+        }
+        else if (elapsedTime < 60f)
+        {
+            // Giai đoạn 2 (30-60s): Khó vừa, ra lẻ, hàng dọc, hoặc đường chéo
+            int rand = Random.Range(0, 3);
+            if (rand == 0) return WaveType.Single;
+            if (rand == 1) return WaveType.Column;
+            return WaveType.Diagonal;
+        }
+        else
+        {
+            // Giai đoạn 3 (>60s): Siêu khó, mở khóa đội hình chữ V 
+            int rand = Random.Range(0, 4);
+            return (WaveType)rand;
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // FORMATIONS
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private void SpawnSingle()
+    {
+        float y = GetSafeSpawnY();
+        if (!float.IsNaN(y))
+        {
+            SpawnEnemy(spawnX, y, GetRandomStopX());
+        }
+    }
+
+    private void SpawnColumn(int count)
+    {
+        float centerY = GetSafeSpawnY();
+        if (float.IsNaN(centerY)) return;
+
+        float stopX = GetRandomStopX(); // Cả hàng sẽ dừng chung ở 1 mốc X (tạo thành bức tường)
+
+        for (int i = 0; i < count; i++)
+        {
+            float offset = (i - count / 2) * minSpacingY;
+            float y = centerY + offset;
+            
+            // Đảm bảo không bị lố ra ngoài màn hình
+            if (y >= screenMinY && y <= screenMaxY)
+            {
+                SpawnEnemy(spawnX, y, stopX);
+            }
+        }
+    }
+
+    private void SpawnVShape()
+    {
+        float centerY = GetSafeSpawnY();
+        if (float.IsNaN(centerY)) return;
+
+        float leadStopX = GetRandomStopX();
+
+        // Mũi nhọn (Con đi đầu, tiến sâu nhất vào trong màn hình)
+        SpawnEnemy(spawnX, centerY, leadStopX);
+
+        // 2 cánh (Trên và dưới)
+        float wingY1 = centerY + minSpacingY;
+        float wingY2 = centerY - minSpacingY;
+        
+        // Cánh lùi lại phía sau 1 khoảng (tọa độ X lớn hơn)
+        float wingStopX = leadStopX + 1.5f; 
+        
+        // Spawn lùi lại ngoài màn hình 1 chút để tạo cảm giác bay hình chữ V ngay từ đầu
+        float wingSpawnX = spawnX + 1.5f; 
+
+        if (wingY1 <= screenMaxY) SpawnEnemy(wingSpawnX, wingY1, wingStopX);
+        if (wingY2 >= screenMinY) SpawnEnemy(wingSpawnX, wingY2, wingStopX);
+    }
+
+    private void SpawnDiagonal(int count)
+    {
+        float centerY = GetSafeSpawnY();
+        if (float.IsNaN(centerY)) return;
+
+        float baseStopX = GetRandomStopX();
+
+        for (int i = 0; i < count; i++)
+        {
+            float offset = (i - count / 2) * minSpacingY;
+            float y = centerY + offset;
+            
+            // Xếp thành hình bậc thang chéo
+            float stopX = baseStopX + i * 1.5f; 
+            float currentSpawnX = spawnX + i * 1.5f;
+
+            if (y >= screenMinY && y <= screenMaxY)
+            {
+                SpawnEnemy(currentSpawnX, y, stopX);
+            }
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // UTILS
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private float GetRandomStopX()
+    {
+        float screenWidth = screenMaxX - screenMinX;
+        float stopMinX    = screenMinX + screenWidth * minTargetXRatio;
+        float stopMaxX    = screenMinX + screenWidth * maxTargetXRatio;
+        return Random.Range(stopMinX, stopMaxX);
+    }
+
+    private void SpawnEnemy(float x, float y, float targetX)
+    {
+        Vector3 pos = new Vector3(x, y, 0f);
+        GameObject obj = Instantiate(currentWavePrefab, pos, currentWavePrefab.transform.rotation);
+        
+        Enemy enemy = obj.GetComponent<Enemy>();
+        if (enemy != null)
+        {
+            enemy.targetX = targetX;
+        }
+    }
+
     private float GetSafeSpawnY()
     {
         const int maxAttempts = 10;
-
         for (int i = 0; i < maxAttempts; i++)
         {
-            float candidateY = Random.Range(screenMinY, screenMaxY);
-
-            if (IsSafeY(candidateY))
-                return candidateY;
+            // Hẹp lại 1 chút để đủ không gian cho các đội hình bám theo centerY
+            float candidateY = Random.Range(screenMinY + minSpacingY, screenMaxY - minSpacingY);
+            if (IsSafeY(candidateY)) return candidateY;
         }
-
-        return float.NaN; // skip this spawn
+        return float.NaN;
     }
 
     private bool IsSafeY(float candidateY)
     {
-        // Find all active enemies and check vertical distance
         Enemy[] existing = FindObjectsByType<Enemy>(FindObjectsSortMode.None);
         foreach (Enemy e in existing)
         {
@@ -122,7 +258,6 @@ public class EnemySpawner : MonoBehaviour
         return true;
     }
 
-    // Editor helper — show spawn line & spawn zone
     private void OnDrawGizmos()
     {
         if (Camera.main == null) return;
@@ -136,21 +271,14 @@ public class EnemySpawner : MonoBehaviour
         float spawnMaxY    = topRight.y;
         float gizmoX       = bottomRight.x + spawnOffsetX;
 
-        // Đường vàng = vị trí spawn (ngoài màn hình)
         Gizmos.color = Color.yellow;
-        Gizmos.DrawLine(new Vector3(gizmoX, spawnMinY, 0f),
-                        new Vector3(gizmoX, spawnMaxY, 0f));
+        Gizmos.DrawLine(new Vector3(gizmoX, spawnMinY, 0f), new Vector3(gizmoX, spawnMaxY, 0f));
 
-        // Vùng xanh lá = khu vực Y cho phép spawn (trong màn hình)
         Gizmos.color = new Color(0f, 1f, 0f, 0.15f);
-        Vector3 zoneCenter = new Vector3(
-            (bottomLeft.x + bottomRight.x) / 2f,
-            (spawnMinY + spawnMaxY) / 2f,
-            0f);
+        Vector3 zoneCenter = new Vector3((bottomLeft.x + bottomRight.x) / 2f, (spawnMinY + spawnMaxY) / 2f, 0f);
         Vector3 zoneSize = new Vector3(bottomRight.x - bottomLeft.x, spawnMaxY - spawnMinY, 0f);
         Gizmos.DrawCube(zoneCenter, zoneSize);
 
-        // Viền xanh lá
         Gizmos.color = Color.green;
         Gizmos.DrawWireCube(zoneCenter, zoneSize);
     }
