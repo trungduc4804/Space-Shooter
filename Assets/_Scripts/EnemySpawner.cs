@@ -76,7 +76,9 @@ public class EnemySpawner : MonoBehaviour
         if (float.IsNaN(spawnY)) return; // no safe position found
 
         Vector3 spawnPos = new Vector3(spawnX, spawnY, 0f);
-        GameObject enemyObj = Instantiate(enemyPrefab, spawnPos, Quaternion.identity);
+        // Quan trọng: Sử dụng enemyPrefab.transform.rotation thay vì Quaternion.identity
+        // để giữ nguyên góc xoay (Z=90) mà user đã setup trong Prefab.
+        GameObject enemyObj = Instantiate(enemyPrefab, spawnPos, enemyPrefab.transform.rotation);
 
         // Tell the enemy where to stop inside the screen (calculated from viewport ratio)
         Enemy enemy = enemyObj.GetComponent<Enemy>();

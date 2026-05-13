@@ -22,7 +22,8 @@ public class Bullet : MonoBehaviour
 
     private void Start()
     {
-        // Fire in the direction the bullet is facing (local up = right for a sideways shooter)
+        // GDD: side-scrolling shooter (phẳng ngang). 
+        // Trong Unity 2D, hướng "tiến" theo trục ngang là transform.right (trục X)
         rb.linearVelocity = transform.up * speed;
     }
 

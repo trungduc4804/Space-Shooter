@@ -68,9 +68,6 @@ public class Enemy : MonoBehaviour
         currentHp  = maxHp;
         shootTimer = 0f; // bắn ngay khi fully on screen (không cần chờ 5s đầu)
 
-        // Lật sprite để nhìn về phía player (trái)
-        sr.flipX = true;
-
         phase = Phase.Entering;
     }
 
@@ -171,7 +168,8 @@ public class Enemy : MonoBehaviour
                               - (Vector2)firePoint.position).normalized;
         }
 
-        GameObject  bulletObj = Instantiate(enemyBulletPrefab, firePoint.position, Quaternion.identity);
+        // Quan trọng: dùng enemyBulletPrefab.transform.rotation để giữ góc Z=90 mà user đã setup trong prefab
+        GameObject  bulletObj = Instantiate(enemyBulletPrefab, firePoint.position, enemyBulletPrefab.transform.rotation);
         EnemyBullet bullet    = bulletObj.GetComponent<EnemyBullet>();
 
         if (bullet != null)

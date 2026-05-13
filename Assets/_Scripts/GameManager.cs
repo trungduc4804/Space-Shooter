@@ -37,7 +37,6 @@ public class GameManager : MonoBehaviour
     }
     public void QuitGame()
     {   
-        Debug.Log("Quit Game");
         Application.Quit();
     }
     public bool IsGameOver => isGameOver;
